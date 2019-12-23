@@ -4,11 +4,19 @@
 #include <iostream>
 #include <sstream>
 #include <bitset>
+#include <functional>
 
 void printVector(std::vector<unsigned char> &v){
     for (auto &m: v){
         std::cout << std::hex << (int)m << " ";
     }
+}
+
+bool IsSubset(std::vector<int> A, std::vector<int> B)
+{
+    std::sort(A.begin(), A.end());
+    std::sort(B.begin(), B.end());
+    return std::includes(A.begin(), A.end(), B.begin(), B.end());
 }
 
 std::string to_hex_string( const unsigned char i ) {
@@ -24,6 +32,56 @@ std::string to_hex_string( const unsigned char i ) {
 ////    return res;
 //
 //}
+
+void getFatChain(std::vector<unsigned char> &fat, std::vector<int> &chain){
+    for(;;){
+
+        std::vector<unsigned char> num{fat[chain.back()*2+1], fat[chain.back()*2]};
+        auto hexabyte = hexbytesToInt(num);
+
+        if(hexabyte==0){
+            chain.clear();
+            break;
+        }
+        else if(hexabyte<65528) chain.emplace_back(hexabyte);
+        else break;
+    }
+}
+
+std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat){
+
+    std::vector<std::vector<int>> chains;
+    for(auto i=2;i*2+1<fat.size();i++){
+
+        std::vector<int> chain;
+        chain.emplace_back(i);
+        getFatChain(fat, std::ref(chain));
+
+        if(!chain.empty()){
+            chains.emplace_back(chain);
+            chain.clear();
+        }
+    }
+    for(auto i=0;i<chains.size();i++){
+        for(auto j=0;j<chains.size();j++){
+
+            if(i!=j){
+                auto a = chains[i];
+                auto b = chains[j];
+                if(IsSubset(chains[i], chains[j])){
+                    chains[j].clear();
+                }
+            }
+        }
+    }
+    for(auto i=0;i<chains.size();){
+        if(chains[i].empty()) chains.erase(chains.begin()+i);
+        else i++;
+    }
+
+    return chains;
+}
+
 
 std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &rootDirectory) {
     std::vector<file> allFiles;

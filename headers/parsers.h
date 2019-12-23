@@ -36,9 +36,12 @@ typedef struct fileDir {
 #define PAGE 512
 
 void printVector(std::vector<unsigned char> &v);
+bool IsSubset(std::vector<int> A, std::vector<int> B);
 std::vector<unsigned char> reverseBites(std::vector<unsigned char> vect);
 auto hexbytesToInt(const std::vector<unsigned char> &b1) -> int;
 std::string to_hex_string( const unsigned char i );
+void getFatChain(std::vector<unsigned char> &fat, std::vector<int> &chain);
+std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat);
 std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &rootDirectory);
 std::string hexToString(std::vector<unsigned char> &vect);
 std::map<std::string, bool> parseAttribute(unsigned char val);
