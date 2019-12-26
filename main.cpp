@@ -8,9 +8,15 @@
 #include "parsers.h"
 
 #define PAGE 512
+//        for(auto i=0;i<allFiles.size();i++){
+//            int size = allFiles[i].size/2048+1;
+//            int size2 = allFiles[i].fat.size();
+//            if(size!=allFiles[i].fat.size()){
+//                allFiles[i].size = size*2048;
+//            }
+//        }
 
-
-int copyClusters(std::vector<file> &allFiles, std::string &filename, int root_folder_loc, int root_size, int fat_start){
+void copyClusters(std::vector<file> &allFiles, std::string &filename, int root_folder_loc, int root_size, int fat_start){
     std::vector<int> used_clusters;
     for(auto &file:allFiles){
         for(auto i=0;i<file.fat.size();i++){
@@ -21,20 +27,32 @@ int copyClusters(std::vector<file> &allFiles, std::string &filename, int root_fo
                 int cluster_num = findFreeCluster(std::ref(allFiles));
                 std::vector<unsigned char> cluster = readPart(filename, root_folder_loc + root_size+(4*PAGE)*(file.fat[i]-2) , root_folder_loc + root_size+(4*PAGE)*(file.fat[i]-1));
                 writeToFile(cluster, filename, root_folder_loc+root_size+(4*PAGE)*(cluster_num-2));
-                writeToFile()
+                if(i>0){
+                    std::vector<unsigned char> vec = intToUnsignedChar(file.fat[i-1]);
+                    writeToFile(std::ref(vec) , filename, fat_start+2*cluster_num);
+                }
+                else{
+                    std::vector<unsigned char> vec = intToUnsignedChar(file.fat[i]);
+                    writeToFile(std::ref(vec) , filename, fat_start+2*cluster_num);
+                }
+
             }
         }
     }
 }
 
 
-void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, const int root_folder_loc, const int root_size, std::string &filename, std::string current_dir, std::vector<std::vector<int>> &chains){
+void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, const int root_folder_loc, const int root_size, std::string &filename, std::string current_dir, std::vector<std::vector<int>> &chains, bool toWrite){
 
     if(!boost::filesystem::exists(boost::filesystem::path(current_dir))){
         boost::filesystem::create_directory(boost::filesystem::path(current_dir));
     }
     for(auto &entry:allFiles){
+
         getFatChain(fat, std::ref(entry.fat));
+
+        if(!entry.attr["NDIR"] && static_cast<int>(entry.size/2048+1)!=entry.fat.size()) entry.size = entry.fat.size()*2048;
+
 
         for(auto i=0;i<chains.size();i++){
 
@@ -52,13 +70,17 @@ void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, con
 
         if(!entry.attr["NDIR"]){
 
-            std::ofstream outfile;
-            outfile.open(current_dir+"/"+entry.name+"."+entry.ext, std::ios_base::app);
+            if(toWrite){
+                std::ofstream outfile;
+                outfile.open(current_dir+"/"+entry.name+"."+entry.ext, std::ios_base::app);
 
-            for(auto &k:entry.fat){
+                for(auto &k:entry.fat) {
 
-                std::vector<unsigned char> cluster = readPart(filename, root_folder_loc + root_size+(4*PAGE)*(k-2) , root_folder_loc + root_size+(4*PAGE)*(k-1));
-                for(const auto &c : hexToString(cluster)) outfile << c;
+                    std::vector<unsigned char> cluster = readPart(filename,
+                                                                  root_folder_loc + root_size + (4 * PAGE) * (k - 2),
+                                                                  root_folder_loc + root_size + (4 * PAGE) * (k - 1));
+                    for (const auto &c : hexToString(cluster)) outfile << c;
+                }
             }
         }
         else{
@@ -68,7 +90,7 @@ void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, con
 
                 std::vector<file> entryFiles = getFilesFromRootDirectory(cluster);
 
-                storeData(std::ref(entryFiles), fat, root_folder_loc, root_size, filename, current_dir+"/"+entry.name, chains);
+                storeData(std::ref(entryFiles), fat, root_folder_loc, root_size, filename, current_dir+"/"+entry.name, chains, toWrite);
             }
         }
     }
@@ -130,7 +152,7 @@ int main() {
         std::vector<unsigned char> fat = readPart(filename, fat_start , fat_start + fat_size);
         auto chains = getAllChains(std::ref(fat));
 
-        storeData(std::ref(allFiles), std::ref(fat), root_folder_loc, root_size, std::ref(filename),"root", std::ref(chains));
+        storeData(std::ref(allFiles), std::ref(fat), root_folder_loc, root_size, std::ref(filename),"root", std::ref(chains), false);
 
         if(!chains.empty()){
             for(auto j=0;j<chains.size();j++){
@@ -146,7 +168,11 @@ int main() {
             }
         }
         allFiles = getFilesFromRootDirectory(rootDirectory);
-        storeData(std::ref(allFiles), std::ref(fat), root_folder_loc, root_size, std::ref(filename),"root", std::ref(chains));
+
+
+
+
+        storeData(std::ref(allFiles), std::ref(fat), root_folder_loc, root_size, std::ref(filename),"root", std::ref(chains), true);
 
 
     }

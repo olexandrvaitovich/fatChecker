@@ -64,6 +64,38 @@ tm parseDate(std::vector<unsigned char> &bytes){
     return time;
 }
 
+std::vector<unsigned char> intToUnsignedChar(int val) {
+    std::stringstream stream;
+    stream << std::hex << val;
+    std::string result (stream.str());
+    int totalLength = std::to_string(val).size();
+    int fatResSize = result.size();
+    for (int i = 0; i < 4 - fatResSize; i++) {
+        result = "0" + result;
+    }
+
+    result.insert(2, 1, ' ');
+
+    std::for_each(result.begin(), result.end(), [](char & c){
+        c = ::toupper(c);
+    });
+
+    std::cout << "res: " << result << std::endl;
+
+    std::istringstream hex_chars_stream(result);
+    std::vector<unsigned char> bytes;
+
+    unsigned int c;
+    while (hex_chars_stream >> std::hex >> c) {
+        bytes.push_back(c);
+    }
+    unsigned char temp = bytes[1];
+    bytes[1] = bytes[0];
+    bytes[0] = temp;
+
+    return bytes;
+}
+
 std::vector<unsigned char> parseRootEntryToBytes(file entry) {
     std::vector<unsigned char> rootEntry;
     stringToUnsignedChar(entry.name, rootEntry); // NAME
@@ -83,30 +115,10 @@ std::vector<unsigned char> parseRootEntryToBytes(file entry) {
         rootEntry.emplace_back(val);
     }
 
-    std::stringstream stream; // FAT
-    stream << std::hex << entry.fat[0];
-    std::string result (stream.str());
-    int fatResSize = result.size();
-    for (int i = 0; i < 4 - fatResSize; i++) {
-        result = "0" + result;
-    }
-    std::string fatBytes;
-    for (int i = 0; i < 5; i++) {
-        if (i == 2) {
-            fatBytes += ' ';
-        } else {
-            fatBytes += result[i];
-        }
-    }
-    std::istringstream hex_chars_stream(fatBytes);
-    std::vector<unsigned char> bytes;
+    std::vector<unsigned char> bytes = intToUnsignedChar(entry.fat[0]); // FAT
 
-    unsigned int c;
-    while (hex_chars_stream >> std::hex >> c) {
-        bytes.push_back(c);
-    }
-    rootEntry.emplace_back(bytes[1]);
     rootEntry.emplace_back(bytes[0]);
+    rootEntry.emplace_back(bytes[1]);
 
     for (int i = 0; i < 4; i++) { // LAST EMPTY BYTES
         unsigned val = 0;
@@ -155,8 +167,8 @@ bool isDir(std::vector<int> chain, std::string &filename, int root_folder_loc, i
 
 
 void getFatChain(std::vector<unsigned char> &fat, std::vector<int> &chain){
+    std::vector<int> stop_symbols{0xffff, 0xf3ff,0xfff7,0xf7ff,0xf0ff};
     for(;;){
-
         std::vector<unsigned char> num{fat[chain.back()*2+1], fat[chain.back()*2]};
         auto hexabyte = hexbytesToInt(num);
 
@@ -164,7 +176,14 @@ void getFatChain(std::vector<unsigned char> &fat, std::vector<int> &chain){
             chain.clear();
             break;
         }
-        else if(hexabyte<65528) chain.emplace_back(hexabyte);
+        else if(hexabyte<9000) {
+            if (std::find(chain.begin(),chain.end(), hexabyte) != chain.end()) {
+                std::cerr << "Cluster contains cycle " << hexabyte << std::endl;
+                break;
+            } else {
+                chain.emplace_back(hexabyte);
+            }
+        }
         else break;
     }
 }
@@ -244,7 +263,9 @@ std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &ro
         rootFile.create_date = parseDate(creationDate);
         std::reverse(fatRef.begin(), fatRef.end());
         rootFile.fat.emplace_back(hexbytesToInt(fatRef));
-
+        std::vector<unsigned char> filesize = std::vector<unsigned char>(rootDirectory.begin() + iter + 28, rootDirectory.begin() + iter + 32);
+        std::reverse(filesize.begin(), filesize.end());
+        rootFile.size = hexbytesToInt(filesize);
 
         allFiles.push_back(rootFile);
     }

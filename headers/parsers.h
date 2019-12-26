@@ -32,6 +32,7 @@ typedef struct fileDir {
     std::vector<int> fat;
     tm create_time;
     tm create_date;
+    int size;
 } file;
 
 #define PAGE 512
@@ -57,4 +58,5 @@ void stringToUnsignedChar(std::string str, std::vector<unsigned char> &arr);
 std::string createString(char val, int numbers);
 std::vector<unsigned char> parseRootEntryToBytes(file entry);
 int findEmptyByteRoot(std::vector<unsigned char> rootDirectory);
+std::vector<unsigned char> intToUnsignedChar(int val);
 #endif //FATCHECKER_PARSERS_H
