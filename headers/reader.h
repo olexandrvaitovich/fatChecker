@@ -4,6 +4,10 @@
 
 #include <vector>
 #include <string>
+#include "parsers.h"
+
 std::vector<unsigned char> readPart(std::string &filename, int begin, int end);
 std::vector<unsigned char> convertToHex(std::string &bytes);
+void writeToFile(std::vector<unsigned char> &vect, std::string const &name, size_t pos);
+int findFreeCluster(std::vector<file> &allFiles);
 #endif //FATCHECKER_READER_H

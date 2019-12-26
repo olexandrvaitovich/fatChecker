@@ -10,6 +10,23 @@
 #define PAGE 512
 
 
+int copyClusters(std::vector<file> &allFiles, std::string &filename, int root_folder_loc, int root_size, int fat_start){
+    std::vector<int> used_clusters;
+    for(auto &file:allFiles){
+        for(auto i=0;i<file.fat.size();i++){
+            if(std::find(used_clusters.begin(), used_clusters.end(), file.fat[i]) == used_clusters.end()){
+                used_clusters.emplace_back(file.fat[i]);
+            }
+            else{
+                int cluster_num = findFreeCluster(std::ref(allFiles));
+                std::vector<unsigned char> cluster = readPart(filename, root_folder_loc + root_size+(4*PAGE)*(file.fat[i]-2) , root_folder_loc + root_size+(4*PAGE)*(file.fat[i]-1));
+                writeToFile(cluster, filename, root_folder_loc+root_size+(4*PAGE)*(cluster_num-2));
+                writeToFile()
+            }
+        }
+    }
+}
+
 
 void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, const int root_folder_loc, const int root_size, std::string &filename, std::string current_dir, std::vector<std::vector<int>> &chains){
 
@@ -33,7 +50,7 @@ void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, con
             }
         }
 
-        if(entry.attr["NDIR"]){
+        if(!entry.attr["NDIR"]){
 
             std::ofstream outfile;
             outfile.open(current_dir+"/"+entry.name+"."+entry.ext, std::ios_base::app);
@@ -63,6 +80,7 @@ int main() {
     std::string filename{"../data/hd.img"};
 
     std::vector<unsigned char> mbr = readPart(filename, 0, PAGE); //reading mbr
+//    std::vector<unsigned char> bigPartOfFile = readPart(filename, 0, PAGE * PAGE * 2);
 
     parseMBR(mbr, mbrInfo);
 
@@ -89,6 +107,22 @@ int main() {
         std::vector<unsigned char> rootDirectory = readPart(filename, root_folder_loc, root_folder_loc + root_size);
 
         std::vector<file> allFiles = getFilesFromRootDirectory(rootDirectory);
+//        for (auto t: allFiles) {
+//            std::cout << t.name << " " << t.ext << std::endl;
+//            for (auto f: t.attr) {
+//                std::cout << f.first << " - " << f.second << std::endl;
+//            }
+//            std::cout << "\n";
+//        }
+//        break;
+//        for(auto &fff:allFiles) std::cout<<fff.name<<std::endl;
+//        break;
+
+//        for(int ii=0;ii<allFiles.size();ii++){
+//        std::cout<<isDir(allFiles[ii].fat, std::ref(filename), root_folder_loc, root_size)<<std::endl;}
+//        for(auto &alf:allFiles) std::cout<<alf.name<<" "<<alf.fat[0]<<std::endl;
+//        std::cout<<root_folder_loc + root_size+(4*PAGE)*(43-2)<<std::endl;
+//        break;
 
         const int fat_start = i + PAGE;
         const int fat_size = bootInfo.sectors_per_fat * bootInfo.bytes_per_sector;
@@ -99,17 +133,23 @@ int main() {
         storeData(std::ref(allFiles), std::ref(fat), root_folder_loc, root_size, std::ref(filename),"root", std::ref(chains));
 
         if(!chains.empty()){
-            std::vector<file> lost_clusters;
             for(auto j=0;j<chains.size();j++){
                 file f;
                 f.name = "file"+std::to_string(j);
                 f.ext = "txt";
-                f.attr["NDIR"] = true;
                 f.fat.emplace_back(chains[j][0]);
-                lost_clusters.emplace_back(f);
+                getFatChain(std::ref(fat), std::ref(f.fat));
+                f.attr["NDIR"] = isDir(std::ref(f.fat), std::ref(filename), root_folder_loc, root_size);
+                std::vector<unsigned char> entry = parseRootEntryToBytes(f);
+                int start = findEmptyByteRoot(rootDirectory);
+                writeToFile(entry, filename, start+root_folder_loc);
             }
-            storeData(std::ref(lost_clusters), std::ref(fat), root_folder_loc, root_size, std::ref(filename), "root/lost_clusters", std::ref(chains));
-            assert(chains.empty());
         }
+        allFiles = getFilesFromRootDirectory(rootDirectory);
+        storeData(std::ref(allFiles), std::ref(fat), root_folder_loc, root_size, std::ref(filename),"root", std::ref(chains));
+
+
     }
 }
+
+

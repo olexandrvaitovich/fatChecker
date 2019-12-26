@@ -30,16 +30,21 @@ typedef struct fileDir {
     std::string ext;
     std::map<std::string, bool> attr;
     std::vector<int> fat;
-    std::string create_time;
+    tm create_time;
+    tm create_date;
 } file;
 
 #define PAGE 512
-
+tm parseTime(std::vector<unsigned char> &bytes);
+tm parseDate(std::vector<unsigned char> &bytes);
 void printVector(std::vector<unsigned char> &v);
+void fileToBytes(file fileStruct);
+int findEmptyByteRoot(std::vector<unsigned char> rootDirectory);
 bool IsSubset(std::vector<int> A, std::vector<int> B);
 std::vector<unsigned char> reverseBites(std::vector<unsigned char> vect);
 auto hexbytesToInt(const std::vector<unsigned char> &b1) -> int;
 std::string to_hex_string( const unsigned char i );
+bool isDir(std::vector<int> chain, std::string &filename, int root_folder_loc, int root_size);
 void getFatChain(std::vector<unsigned char> &fat, std::vector<int> &chain);
 std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat);
 std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &rootDirectory);
@@ -48,4 +53,8 @@ std::map<std::string, bool> parseAttribute(unsigned char val);
 void parseMBR(const std::vector<unsigned char> &mbr, mbr_info &mbrInfo);
 void parsePartitionEntry(const std::vector<unsigned char> &mbr_part, mbr_info &mbrInfo);
 void parseBootSector(const std::vector<unsigned char> &boot, boot_info &bootInfo);
+void stringToUnsignedChar(std::string str, std::vector<unsigned char> &arr);
+std::string createString(char val, int numbers);
+std::vector<unsigned char> parseRootEntryToBytes(file entry);
+int findEmptyByteRoot(std::vector<unsigned char> rootDirectory);
 #endif //FATCHECKER_PARSERS_H
