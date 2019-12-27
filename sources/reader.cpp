@@ -3,6 +3,7 @@
 #include "reader.h"
 #include <algorithm>
 #include <functional>
+#include <iostream>
 
 
 int findFreeCluster(std::vector<unsigned char> &fat){
@@ -35,6 +36,7 @@ void writeToFile(std::vector<unsigned char> &vect, std::string const &name, size
     std::fstream s(name);
     s.seekp(pos);
     s.write((char *)&vect[0], vect.size());
+    s.close();
 }
 
 void copyCluster(std::string &filename, size_t from_pos, size_t to_pos, int sectors_per_cluster){

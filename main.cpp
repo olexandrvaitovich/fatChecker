@@ -9,35 +9,100 @@
 
 #define PAGE 512
 
+void copyPart(std::string &filename, size_t from_pos, size_t to_pos, int bytes){
+    std::vector<unsigned char> part = readPart(filename, from_pos, from_pos + bytes);
+
+    writeToFile(part, filename, to_pos);
+}
+
+std::vector<unsigned char>::iterator clusterIsEmpty(std::vector<unsigned char> &cluster, int count){
+    for (auto i=cluster.begin(); i < cluster.end(); i += 32){
+        if (std::unique(i, i + 32) == i + 1 && *i == 0){
+            count--;
+            if (count == 0){
+                return i;
+            }
+        }
+    }
+    return cluster.end();
+}
+
+void checkLinks(std::vector< unsigned char> mine_entry, std::vector<unsigned char> fathers_entry,
+                int first_cluster_addr, std::string &filename){
+    if (mine_entry[0] != 0x2E || fea)
+    auto temp = std::vector<unsigned char>(mine_entry.begin() + 26, mine_entry.end() + 28);
+    std::reverse(temp.begin(), temp.end());
+    auto cluster_addr = hexbytesToInt(temp) * 512 * 4 + first_cluster_addr;
+    auto cluster = readPart(filename, cluster_addr, cluster_addr + 512 * 4);
+
+    auto free_cluster1 = clusterIsEmpty(cluster, 1);
+    auto free_cluster2 = clusterIsEmpty(cluster, 2);
+
+    if ((free_cluster1 != cluster.end()) && (free_cluster2 != cluster.end())){
+        int inx1 = free_cluster1 - cluster.begin(), inx2 = free_cluster2 - cluster.begin();
+        copyPart(filename, cluster_addr, inx1, 32);
+        copyPart(filename, cluster_addr + 32, inx2, 32);
+
+        mine_entry[0] = 0x2E;
+        fathers_entry[0] = 0x2E;
+        fathers_entry[1] = 0x2E;
+
+        writeToFile(mine_entry,filename, cluster_addr);
+        writeToFile(fathers_entry,filename, cluster_addr);
+    }
+    else{
+        std::cout << 1;
+    }
+}
+
+int detectLocation(file entry, int root_folder_loc){
+    std::string filename{"../data/hd.img"};
+    for(auto i=0;i<17831916;i+=32){
+        std::vector<unsigned char> vec = readPart(filename, root_folder_loc + i, root_folder_loc + i + 32);
+            std::vector<unsigned char> filename = std::vector<unsigned char>(vec.begin(), vec.begin() + 8);
+            std::string name = hexToString(filename);
+            if (name == entry.name) {
+                return root_folder_loc + i;
+            }
+
+    }
+    return -1;
+}
+
 void copyClusters(std::vector<file> &allFiles, std::string &filename, int root_folder_loc, int root_size, int fat_start, int fat_size){
     std::vector<unsigned char> fat = readPart(filename, fat_start , fat_start + fat_size);
     std::vector<int> used_clusters;
-    int n = 0;
     for(auto &file:allFiles){
         for(auto i=0;i<file.fat.size();i++){
             if(std::find(used_clusters.begin(), used_clusters.end(), file.fat[i]) == used_clusters.end()){
                 used_clusters.emplace_back(file.fat[i]);
             }
             else{
+                std::vector<unsigned char> fat = readPart(filename, fat_start , fat_start + fat_size);
                 int cluster_num = findFreeCluster(std::ref(fat));
                 std::vector<unsigned char> cluster = readPart(filename, root_folder_loc + root_size+(4*PAGE)*(file.fat[i]-2) , root_folder_loc + root_size+(4*PAGE)*(file.fat[i]-1));
                 writeToFile(cluster, filename, root_folder_loc+root_size+(4*PAGE)*(cluster_num-2));
                 if(i>0){
                     std::vector<unsigned char> vec = intToUnsignedChar(cluster_num);
+                    std::vector<unsigned char> vec2 = intToUnsignedChar(0xffff);
                     writeToFile(std::ref(vec) , filename, fat_start+2*file.fat[i-1]);
-                    fat = readPart(filename, fat_start , fat_start + fat_size);
+//                    std::cout<<fat_start+2*file.fat[i-1]<<" "<<hexbytesToInt(std::ref(vec))<<" "<<cluster_num<<std::endl;
+                    file.fat[i] = cluster_num;
+                    writeToFile(std::ref(vec2) , filename, fat_start+2*file.fat[i]);
+                    used_clusters.emplace_back(file.fat[i]);
                 }
                 else{
                     std::vector<unsigned char> vec = intToUnsignedChar(cluster_num);
-                    writeToFile(std::ref(vec) , filename, root_folder_loc+32*n+26);
-                    n++;
+                    std::vector<unsigned char> vec2 = intToUnsignedChar(0xffff);
+                    auto fffff = detectLocation(file, root_folder_loc);
+                    writeToFile(std::ref(vec) , filename, fffff+26);
+                    file.fat[i] = cluster_num;
+                    writeToFile(std::ref(vec2) , filename, fat_start+2*file.fat[i]);
+                    used_clusters.emplace_back(file.fat[i]);
                 }
-
             }
         }
-
     }
-
 }
 
 bool checkCluster(std::vector<unsigned char> cluster){
@@ -54,8 +119,6 @@ bool checkCluster(std::vector<unsigned char> cluster){
 std::vector<file> collectEntries(std::vector<file> &allFiles, std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2, std::string &filename, int root_folder_loc, int root_size){
     std::vector<file> toReturn = allFiles;
     for(auto &entry:allFiles){
-//        std::cout<<entry.name<<std::endl;
-
         getFatChain(std::ref(fat), std::ref(fat2), std::ref(entry.fat));
         if(entry.attr["NDIR"]){
             for(auto &k:entry.fat){
@@ -65,6 +128,10 @@ std::vector<file> collectEntries(std::vector<file> &allFiles, std::vector<unsign
                 if(checkCluster(cluster)){
 
                     std::vector<file> entryFiles = getFilesFromRootDirectory(cluster);
+
+                    for (auto &son: entryFiles){
+                        checkLinks(parseRootEntryToBytes(son), parseRootEntryToBytes(entry),root_folder_loc+root_size ,filename);
+                    }
 
                     std::vector<file> processedEntryFiles = collectEntries(std::ref(entryFiles), fat, fat2, filename, root_folder_loc, root_size);
 
@@ -92,10 +159,6 @@ void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, std
         if(!toWrite && mm==allFiles.size()-2){
             break;
         }
-
-
-//        copyClusters(allFiles, fat, filename, root_folder_loc, root_size, fat_start);
-
 
         if(!entry.attr["NDIR"] && static_cast<int>(entry.size/2048+1)!=entry.fat.size()) entry.size = entry.fat.size()*2048;
 
@@ -243,11 +306,11 @@ int main() {
         std::vector<int> used_clusters;
         for(auto &ff:allFiles){
             for(auto hh=0;hh<ff.fat.size();hh++){
-                if(std::find(used_clusters.begin(), used_clusters.end(), ff.fat[i]) == used_clusters.end()){
-                    used_clusters.emplace_back(ff.fat[i]);
+                if(std::find(used_clusters.begin(), used_clusters.end(), ff.fat[hh]) == used_clusters.end()){
+                    used_clusters.emplace_back(ff.fat[hh]);
                 }
                 else{
-                    std::cout<< ff.name << " " << ff.fat[i]<<std::endl;
+                    std::cout<< ff.name << " " << ff.fat[hh]<<std::endl;
                 }
             }
         }
