@@ -2,18 +2,15 @@
 #include <sstream>
 #include "reader.h"
 #include <algorithm>
+#include <functional>
 
 
-int findFreeCluster(std::vector<file> &allFiles){
-    for(auto i=2;i<8704;i++){
-        bool status = true;
-        for(auto &file:allFiles){
-            if(std::find(file.fat.begin(), file.fat.end(), i)!=file.fat.end()){
-                status = false;
-                break;
-            }
-        }
-        if(status) return i;
+int findFreeCluster(std::vector<unsigned char> &fat){
+    for(auto i=4;i<512*34;i+=2){
+        std::vector<unsigned char> hexabytes(fat.begin()+i, fat.begin()+i+2);
+        std::reverse(hexabytes.begin(), hexabytes.end());
+        int num = hexbytesToInt(std::ref(hexabytes));
+        if(num==0) return i/2;
     }
     return -1;
 }

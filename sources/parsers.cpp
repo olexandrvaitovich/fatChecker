@@ -17,6 +17,24 @@ void printVector(std::vector<unsigned char> &v){
     }
 }
 
+void timeToUnsignedChar(tm time, std::vector<unsigned char> &arr) {
+    for (auto t: intToUnsignedChar((time.tm_hour << 3) | (time.tm_min >> 3))) {
+        arr.emplace_back(t);
+    }
+    for (auto t: intToUnsignedChar((time.tm_min << 5) | (time.tm_sec * 2))) {
+        arr.emplace_back(t);
+    }
+}
+
+void dateToUnsignedChar(tm date, std::vector<unsigned char> &arr) {
+    for (auto t: intToUnsignedChar(((date.tm_yday - 1980) >> 1) | (date.tm_sec << 1))) {
+        arr.emplace_back(t);
+    }
+    for (auto t: intToUnsignedChar((date.tm_sec << 5) | (date.tm_min))) {
+        arr.emplace_back(t);
+    }
+}
+
 bool IsSubset(std::vector<int> A, std::vector<int> B)
 {
     std::sort(A.begin(), A.end());
@@ -29,15 +47,7 @@ std::string to_hex_string( const unsigned char i ) {
     s << std::hex << i;
     return s.str();
 }
-//std::string parseTime(std::vector<unsigned char>& time){
-//    std::string res;
-//    return std::to_string(time[0]) + " " + std::to_string(time[1] ) +
-//            " " + std::to_string(time[2]) + " " + std::to_string(time[3]);
-////    return (int)
-////    return res;
-//
-//}
-//
+
 
 void stringToUnsignedChar(std::string str, std::vector<unsigned char> &arr) {
     for (auto t: str) {
@@ -80,8 +90,6 @@ std::vector<unsigned char> intToUnsignedChar(int val) {
         c = ::toupper(c);
     });
 
-    std::cout << "res: " << result << std::endl;
-
     std::istringstream hex_chars_stream(result);
     std::vector<unsigned char> bytes;
 
@@ -110,20 +118,23 @@ std::vector<unsigned char> parseRootEntryToBytes(file entry) {
     std::reverse(attributes.begin(), attributes.end());
     unsigned char attrByte = (unsigned char) std::stoi(attributes, 0, 2);
     rootEntry.emplace_back(attrByte); // ATTRIBUTE
-    for (int i = 0; i < 14; i++) { // FAT
-        unsigned val = 0;
-        rootEntry.emplace_back(val);
+    // TIME
+    for (int i = 0; i < 14; i++) {
+        rootEntry.emplace_back((unsigned char) 0);
     }
+//    timeToUnsignedChar(entry.create_time, rootEntry);
+//    dateToUnsignedChar(entry.create_date, rootEntry);
 
     std::vector<unsigned char> bytes = intToUnsignedChar(entry.fat[0]); // FAT
 
     rootEntry.emplace_back(bytes[0]);
     rootEntry.emplace_back(bytes[1]);
 
-    for (int i = 0; i < 4; i++) { // LAST EMPTY BYTES
-        unsigned val = 0;
-        rootEntry.emplace_back(val);
-    }
+    std::vector<unsigned char> fileSize = intToUnsignedChar(entry.size); // LAST EMPTY BYTES
+    rootEntry.emplace_back(fileSize[1]);
+    rootEntry.emplace_back(fileSize[0]);
+    rootEntry.emplace_back((unsigned char) 0);
+    rootEntry.emplace_back((unsigned char) 0);
 
     return rootEntry;
 }
@@ -166,7 +177,7 @@ bool isDir(std::vector<int> chain, std::string &filename, int root_folder_loc, i
 }
 
 
-void getFatChain(std::vector<unsigned char> &fat, std::vector<int> &chain){
+void getFatChain(std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2, std::vector<int> &chain){
     std::vector<int> stop_symbols{0xffff, 0xf3ff,0xfff7,0xf7ff,0xf0ff};
     for(;;){
         std::vector<unsigned char> num{fat[chain.back()*2+1], fat[chain.back()*2]};
@@ -184,18 +195,30 @@ void getFatChain(std::vector<unsigned char> &fat, std::vector<int> &chain){
                 chain.emplace_back(hexabyte);
             }
         }
-        else break;
+        else{
+            std::vector<unsigned char> num{fat[chain.back()*2+1], fat[chain.back()*2]};
+            auto hexabyte = hexbytesToInt(num);
+            if(hexabyte<9000) {
+                if (std::find(chain.begin(),chain.end(), hexabyte) != chain.end()) {
+                    std::cerr << "Cluster contains cycle " << hexabyte << std::endl;
+                    break;
+                } else {
+                    chain.emplace_back(hexabyte);
+                }
+            }
+            else break;
+        }
     }
 }
 
-std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat){
+std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2){
 
     std::vector<std::vector<int>> chains;
     for(auto i=2;i*2+1<fat.size();i++){
 
         std::vector<int> chain;
         chain.emplace_back(i);
-        getFatChain(fat, std::ref(chain));
+        getFatChain(fat, fat2, std::ref(chain));
 
         if(!chain.empty()){
             chains.emplace_back(chain);
