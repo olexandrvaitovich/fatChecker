@@ -8,32 +8,33 @@
 #include <vector>
 #include <string>
 #include <map>
+#include "Configs.h"
 
-typedef struct mbr_info{
-    std::vector<unsigned long> sectors_count; // count of sectors in n-th boot partition
-    std::vector<unsigned long> starting_sector; // start of n-th boot sector
-    bool fat_flag;
-} mbr;
-
-typedef struct boot_info{
-    int bytes_per_sector;
-    int sectors_per_cluster;
-    int number_of_reserved_sectors;
-    int num_fat_copies;
-    unsigned long total_sectors;
-    unsigned long number_root_entries;
-    int sectors_per_fat;
-} boot;
-
-typedef struct fileDir {
-    std::string name;
-    std::string ext;
-    std::map<std::string, bool> attr;
-    std::vector<int> fat;
-    tm create_time;
-    tm create_date;
-    int size;
-} file;
+//typedef struct mbr_info{
+//    std::vector<unsigned long> sectors_count; // count of sectors in n-th boot partition
+//    std::vector<unsigned long> starting_sector; // start of n-th boot sector
+//    bool fat_flag;
+//} mbr;
+//
+//typedef struct boot_info{
+//    int bytes_per_sector;
+//    int sectors_per_cluster;
+//    int number_of_reserved_sectors;
+//    int num_fat_copies;
+//    unsigned long total_sectors;
+//    unsigned long number_root_entries;
+//    int sectors_per_fat;
+//} boot;
+//
+//typedef struct fileDir {
+//    std::string name;
+//    std::string ext;
+//    std::map<std::string, bool> attr;
+//    std::vector<int> fat;
+//    tm create_time;
+//    tm create_date;
+//    int size;
+//} file
 
 #define PAGE 512
 tm parseTime(std::vector<unsigned char> &bytes);
@@ -43,7 +44,7 @@ void fileToBytes(file fileStruct);
 int findEmptyByteRoot(std::vector<unsigned char> rootDirectory);
 bool IsSubset(std::vector<int> A, std::vector<int> B);
 std::vector<unsigned char> reverseBites(std::vector<unsigned char> vect);
-auto hexbytesToInt(const std::vector<unsigned char> &b1) -> int;
+auto hexbytesToInt(const std::vector<unsigned char> &b1) -> unsigned int;
 std::string to_hex_string( const unsigned char i );
 bool isDir(std::vector<int> chain, std::string &filename, int root_folder_loc, int root_size);
 void getFatChain(std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2, std::vector<int> &chain);

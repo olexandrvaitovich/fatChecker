@@ -125,7 +125,7 @@ std::vector<unsigned char> parseRootEntryToBytes(file entry) {
 //    timeToUnsignedChar(entry.create_time, rootEntry);
 //    dateToUnsignedChar(entry.create_date, rootEntry);
 
-    std::vector<unsigned char> bytes = intToUnsignedChar(entry.fat[0]); // FAT
+    std::vector<unsigned char> bytes = intToUnsignedChar(entry.fat_chain[0]); // FAT
 
     rootEntry.emplace_back(bytes[0]);
     rootEntry.emplace_back(bytes[1]);
@@ -178,16 +178,17 @@ bool isDir(std::vector<int> chain, std::string &filename, int root_folder_loc, i
 
 
 void getFatChain(std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2, std::vector<int> &chain){
-    std::vector<int> stop_symbols{0xffff, 0xf3ff,0xfff7,0xf7ff,0xf0ff};
+    std::vector<int> stop_symbols{0x0ffffff7, 0x0ffffff8,0x0ffffff9,0x0ffffffa,0x0ffffffb,0x0ffffffc,0x0ffffffd,0x0ffffffe,0x0fffffff};
     for(;;){
-        std::vector<unsigned char> num{fat[chain.back()*2+1], fat[chain.back()*2]};
+        std::vector<unsigned char> num{fat[chain.back()*4+3], fat[chain.back()*4+2], fat[chain.back()*4+1], fat[chain.back()*4]};
+
         auto hexabyte = hexbytesToInt(num);
 
         if(hexabyte==0){
             chain.clear();
             break;
         }
-        else if(hexabyte<9000) {
+        else if(hexabyte<2100000) {
             if (std::find(chain.begin(),chain.end(), hexabyte) != chain.end()) {
                 std::cerr << "Cluster contains cycle " << hexabyte << std::endl;
                 break;
@@ -196,9 +197,9 @@ void getFatChain(std::vector<unsigned char> &fat, std::vector<unsigned char> &fa
             }
         }
         else{
-            std::vector<unsigned char> num{fat[chain.back()*2+1], fat[chain.back()*2]};
+            std::vector<unsigned char> num{fat[chain.back()*4+3], fat[chain.back()*4+2], fat[chain.back()*4+1], fat[chain.back()*4]};
             auto hexabyte = hexbytesToInt(num);
-            if(hexabyte<9000) {
+            if(hexabyte<2100000) {
                 if (std::find(chain.begin(),chain.end(), hexabyte) != chain.end()) {
                     std::cerr << "Cluster contains cycle " << hexabyte << std::endl;
                     break;
@@ -212,9 +213,8 @@ void getFatChain(std::vector<unsigned char> &fat, std::vector<unsigned char> &fa
 }
 
 std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2){
-
     std::vector<std::vector<int>> chains;
-    for(auto i=2;i*2+1<fat.size();i++){
+    for(auto i=2;i*4+1<fat.size();i++){
 
         std::vector<int> chain;
         chain.emplace_back(i);
@@ -225,18 +225,24 @@ std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat, std:
             chain.clear();
         }
     }
+    auto copyChains(chains);
+    for(auto &ch:copyChains) std::sort(ch.begin(), ch.end());
+
     for(auto i=0;i<chains.size();i++){
+        std::cout<<i<<std::endl;
         for(auto j=0;j<chains.size();j++){
 
             if(i!=j){
                 auto a = chains[i];
                 auto b = chains[j];
-                if(IsSubset(chains[i], chains[j])){
-                    chains[j].clear();
+                if(std::includes(chains[i].begin(), chains[i].end(), chains[j].begin(), chains[j].end())){
+                    chains.erase(chains.begin()+j);
+                    i--;
                 }
             }
         }
     }
+
     for(auto i=0;i<chains.size();){
         if(chains[i].empty()) chains.erase(chains.begin()+i);
         else i++;
@@ -256,9 +262,32 @@ tm parseTime(std::vector<unsigned char> &bytes){
 
 std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &rootDirectory) {
     std::vector<file> allFiles;
-    for (int iter = 0;;iter+=32) {
-        if(iter==rootDirectory.size()){
+    int iter = 0;
+    while (iter < rootDirectory.size()) {
+        if (rootDirectory[iter] == 0x0) {
             break;
+        }
+        std::vector<longFile> longFiles;
+        while (rootDirectory[iter+11] == 0xf) {
+            longFile longF;
+            std::vector<unsigned char> name = std::vector<unsigned char>(rootDirectory.begin() + iter + 1, rootDirectory.begin() + iter + 10);
+            std::vector<unsigned char> secondPart = std::vector<unsigned char>(rootDirectory.begin() + iter + 14, rootDirectory.begin() + iter + 25);
+            std::vector<unsigned char> thirdPart = std::vector<unsigned char>(rootDirectory.begin() + iter + 28, rootDirectory.begin() + iter + 32);
+
+            name.insert( name.end(), secondPart.begin(), secondPart.end() );
+            name.insert( name.end(), thirdPart.begin(), thirdPart.end() );
+
+            std::string nameString = hexToString(name);
+            std::string normalName;
+            for (auto t: nameString) {
+                if (isalpha(t) || isdigit(t) || ispunct(t)) {
+                    normalName += t;
+                }
+            }
+
+            longF.nameCharacters = normalName;
+            longFiles.emplace_back(longF);
+            iter += 32;
         }
         std::vector<unsigned char> filename = std::vector<unsigned char>(rootDirectory.begin() + iter, rootDirectory.begin() + iter + 8);
         if ((!isalpha(filename[0]) && !isdigit(filename[0])) || filename[0] == 0) {
@@ -272,11 +301,15 @@ std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &ro
         std::vector<unsigned char> attr = std::vector<unsigned char>(rootDirectory.begin() + iter + 11, rootDirectory.begin() + iter + 12);
         std::vector<unsigned char> creationTime = std::vector<unsigned char>(rootDirectory.begin() + iter + 22, rootDirectory.begin() + iter + 24);
         std::vector<unsigned char> creationDate = std::vector<unsigned char>(rootDirectory.begin() + iter + 24, rootDirectory.begin() + iter + 26);
-        std::vector<unsigned char> fatRef = std::vector<unsigned char>(rootDirectory.begin() + iter + 26, rootDirectory.begin() + iter + 28);
+
+        std::vector<unsigned char> fatRef{rootDirectory[iter+21], rootDirectory[iter+20] ,rootDirectory[iter+27], rootDirectory[iter+26]};
 
         std::string name = hexToString(filename);
         std::string extension = hexToString(ext);
 
+        for (int i = longFiles.size() - 1; i >= 0; i--) {
+            rootFile.longName += longFiles[i].nameCharacters;
+        }
         rootFile.name = name;
         rootFile.ext = extension;
         rootFile.attr = parseAttribute(attr[0]);
@@ -284,13 +317,14 @@ std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &ro
         rootFile.create_time = parseTime(creationTime);
         std::reverse(creationDate.begin(),creationDate.end());
         rootFile.create_date = parseDate(creationDate);
-        std::reverse(fatRef.begin(), fatRef.end());
-        rootFile.fat.emplace_back(hexbytesToInt(fatRef));
+//        std::reverse(fatRef.begin(), fatRef.end());
+        rootFile.fat_chain.emplace_back(hexbytesToInt(fatRef));
         std::vector<unsigned char> filesize = std::vector<unsigned char>(rootDirectory.begin() + iter + 28, rootDirectory.begin() + iter + 32);
         std::reverse(filesize.begin(), filesize.end());
         rootFile.size = hexbytesToInt(filesize);
 
         allFiles.push_back(rootFile);
+        iter += 32;
     }
     return allFiles;
 }
@@ -346,8 +380,8 @@ std::map<std::string, bool> parseAttribute(unsigned char val) {
     return attrbiutes;
 }
 
-auto hexbytesToInt(const std::vector<unsigned char> &b1) -> int{
-    int val;
+auto hexbytesToInt(const std::vector<unsigned char> &b1) -> unsigned int{
+    unsigned int val = 0;
     for (size_t i=0; i < b1.size(); ++i){
         if (i ==0){
             val = (b1[0] << 8*(b1.size()-1));
@@ -355,18 +389,17 @@ auto hexbytesToInt(const std::vector<unsigned char> &b1) -> int{
             val |= (b1[i] << (8 * (b1.size()-1) - 8 * i));
         }
     }
-    return (int)val;
+    return (unsigned int)val;
 }
 
 void parseBootSector(const std::vector<unsigned char> &boot, boot_info &bootInfo){
-    std::vector<int> offsets{11,13,14,16,17,19,22};
-    std::vector<int> lengths{2,1,2,1,2,2,2};
+    std::vector<int> offsets{11,13,14,16,44,32,36};
+    std::vector<int> lengths{2,1,2,1,4,4,4};
 
     auto temp_vect =  std::vector<unsigned char>
             (boot.begin() + offsets[0],boot.begin() + offsets[0]+ lengths[0]);
     std::reverse(temp_vect.begin(), temp_vect.end());
     bootInfo.bytes_per_sector = hexbytesToInt(temp_vect);
-//    std::cout << bootInfo.bytes_per_sector<<"\n";
 
     bootInfo.sectors_per_cluster = (int)boot[offsets[1]];
 
@@ -381,7 +414,7 @@ void parseBootSector(const std::vector<unsigned char> &boot, boot_info &bootInfo
     temp_vect = std::vector<unsigned char>
             (boot.begin() + offsets[4],boot.begin() + offsets[4]+ lengths[4]);
     std::reverse(temp_vect.begin(), temp_vect.end());
-    bootInfo.number_root_entries = hexbytesToInt(temp_vect);
+    bootInfo.first_cluster_of_root = hexbytesToInt(temp_vect);
 
     temp_vect = std::vector<unsigned char>
             (boot.begin() + offsets[5],boot.begin() + offsets[5]+ lengths[5]);
@@ -408,11 +441,16 @@ void parseMBR(const std::vector<unsigned char> &mbr, mbr_info &mbrInfo){
 
 
 void parsePartitionEntry(const std::vector<unsigned char> &mbr_part, mbr_info &mbrInfo){
+    bool fat_flag;
     if ((int)mbr_part[0] == 0 && (int)mbr_part[1] == 0){ // this boot block is disabled
         return;
     }
-    constexpr int filesystem_type_offset = 4, fat16 = 4, fat16B = 6;
-    mbrInfo.fat_flag = ((int)mbr_part[filesystem_type_offset] == fat16 || (int)mbr_part[filesystem_type_offset] == fat16B);
+    constexpr int filesystem_type_offset = 4, fat16 = 4, fat16B = 6, fat32 = 11,  fat32x = 12;
+    fat_flag = ((int)mbr_part[filesystem_type_offset] == fat16 || (int)mbr_part[filesystem_type_offset] == fat16B
+                       || (int)mbr_part[filesystem_type_offset] == fat32x || (int)mbr_part[filesystem_type_offset] == fat32);
+    if (!fat_flag){
+        return;
+    }
 
     constexpr int address_beg = 8, address_end = 12;
     auto address = std::vector<unsigned char>(mbr_part.begin() + address_beg, mbr_part.begin() + address_end);
