@@ -74,6 +74,16 @@ tm parseDate(std::vector<unsigned char> &bytes){
     return time;
 }
 
+//std::vector<unsigned char> intToUnsignedChar(int val) {
+//    int c = ceil(log(val) / log(256));
+//    unsigned char *test = new unsigned char[c]();
+//    memcpy(test, (char *) &val, c);
+//    std::vector<unsigned char> tmp_(test, test + c);
+//    for (int i=0; i < 4 - c; ++i){
+//        tmp_.insert(tmp_.begin(), (unsigned char)0);
+//    }
+//    return tmp_;
+//}
 std::vector<unsigned char> intToUnsignedChar(int val) {
     std::stringstream stream;
     stream << std::hex << val;
@@ -176,11 +186,19 @@ std::vector<unsigned char> parseRootEntryToBytes(file entry) {
 }
 
 int findEmptyByteRoot(std::vector<unsigned char> rootDirectory, int size) {
+    bool status;
     for (int iter = 0;;iter+=size) {
         if (iter == rootDirectory.size()) {
             break;
         }
-        if ((!isalpha(rootDirectory[iter]) && !isdigit(rootDirectory[iter])) || rootDirectory[iter] == 0) {
+        status=true;
+        for(int i=iter;i<iter+size;i++){
+            if(rootDirectory[i]!=0x0){
+                status=false;
+                break;
+            }
+        }
+        if (status) {
             return iter;
         }
     }
@@ -264,6 +282,9 @@ std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat, std:
         }
     }
     for(auto i=0;i<chains.size();i++){
+        if (i % 100 == 0) {
+            std::cout<<i<<std::endl;
+        }
         auto a = chains[i];
         std::sort(a.begin(), a.end());
         for(auto j=0;j<chains.size();j++){
@@ -351,6 +372,10 @@ std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &ro
         rootFile.create_date = parseDate(creationDate);
 //        std::reverse(fatRef.begin(), fatRef.end());
         rootFile.fat_chain.emplace_back(hexbytesToInt(fatRef));
+        if(rootFile.fat_chain[0]>29000){
+            iter+=32;
+            continue;
+        }
         std::vector<unsigned char> filesize = std::vector<unsigned char>(rootDirectory.begin() + iter + 28, rootDirectory.begin() + iter + 32);
         std::reverse(filesize.begin(), filesize.end());
         rootFile.size = hexbytesToInt(filesize);

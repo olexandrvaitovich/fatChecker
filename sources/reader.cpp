@@ -7,11 +7,11 @@
 
 
 int findFreeCluster(std::vector<unsigned char> &fat){
-    for(auto i=4;i<512*34;i+=2){
-        std::vector<unsigned char> hexabytes(fat.begin()+i, fat.begin()+i+2);
+    for(auto i=4;i<512*2048;i+=4){
+        std::vector<unsigned char> hexabytes(fat.begin()+i, fat.begin()+i+4);
         std::reverse(hexabytes.begin(), hexabytes.end());
         int num = hexbytesToInt(std::ref(hexabytes));
-        if(num==0) return i/2;
+        if(num==0) return i/4;
     }
     return -1;
 }
