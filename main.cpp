@@ -17,7 +17,7 @@ void copyPart(std::string &filename, size_t from_pos, size_t to_pos, int bytes){
     writeToFile(part, filename, to_pos);
 }
 
-std::vector<unsigned char>::iterator clusterIsEmpty(std::vector<unsigned char> &cluster, int count){
+std::vector<unsigned char>::iterator clusterIsEmpty(std::vector<unsigned char> &cluster, int count){//how many clusters to skip
     for (auto i=cluster.begin(); i < cluster.end(); i += 32){
         if (std::unique(i, i + 32) == i + 1 && *i == 0){
             count--;
@@ -31,6 +31,7 @@ std::vector<unsigned char>::iterator clusterIsEmpty(std::vector<unsigned char> &
 
 void checkLinks(std::vector< unsigned char> mine_entry, std::vector<unsigned char> fathers_entry,
                 int first_cluster_addr, std::string &filename){
+
     auto temp = std::vector<unsigned char>(mine_entry.begin() + 26, mine_entry.end() + 28);
     std::reverse(temp.begin(), temp.end());
     auto cluster_addr = hexbytesToInt(temp) * 512 * 4 + first_cluster_addr;
@@ -103,15 +104,15 @@ void copyClusters(std::vector<file> &allFiles, std::string &filename, int root_f
     }
 }
 
-bool checkCluster(std::vector<unsigned char> cluster){
-    for(auto i=0;i<cluster.size();i+=2){
-        std::vector<unsigned char> hexabytes = std::vector<unsigned char>(cluster.begin()+i, cluster.begin()+i+2);
-        int num = hexbytesToInt(hexabytes);
-        if(num==0xfff7) return false;
-        }
-
-    return true;
-}
+//bool checkCluster(std::vector<unsigned char> cluster){
+//    for(auto i=0;i<cluster.size();i+=4){
+//        std::vector<unsigned char> hexabytes = std::vector<unsigned char>(cluster.begin()+i, cluster.begin()+i+2);
+//        int num = hexbytesToInt(hexabytes);
+//        if(num==0xfff7) return false;
+//        }
+//
+//    return true;
+//}
 
 
 std::vector<file> collectEntries(std::vector<file> &allFiles, std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2, std::string &filename, int root_folder_loc, int root_size){
@@ -121,9 +122,9 @@ std::vector<file> collectEntries(std::vector<file> &allFiles, std::vector<unsign
         if(entry.attr["NDIR"]){
             for(auto &k:entry.fat_chain){
 
-                std::vector<unsigned char> cluster = readPart(filename, root_folder_loc + root_size+(4*PAGE)*(k-2) , root_folder_loc + root_size+(4*PAGE)*(k-1));
+                std::vector<unsigned char> cluster = readPart(filename, root_folder_loc+(8*PAGE)*(k-2) , root_folder_loc+(8*PAGE)*(k-1));
 
-                if(checkCluster(cluster)){
+//                if(checkCluster(cluster)){
 
                     std::vector<file> entryFiles = getFilesFromRootDirectory(cluster);
 
@@ -134,7 +135,7 @@ std::vector<file> collectEntries(std::vector<file> &allFiles, std::vector<unsign
                     std::vector<file> processedEntryFiles = collectEntries(std::ref(entryFiles), fat, fat2, filename, root_folder_loc, root_size);
 
                     toReturn.insert( toReturn.end(), processedEntryFiles.begin(), processedEntryFiles.end() );
-                }
+//                }
             }
         }
     }
@@ -148,15 +149,15 @@ void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, std
     }
 
     for(auto &entry:allFiles){
-
         getFatChain(std::ref(fat), std::ref(fat2), std::ref(entry.fat_chain));
     }
     int mm = -1;
     for(auto &entry:allFiles){
+        std::cout<<current_dir<<"/"<<entry.longName<<std::endl;
         mm++;
-//        if(!toWrite && mm==allFiles.size()-2){
-//            break;
-//        }
+        if(!toWrite && mm==allFiles.size()-2){
+            break;
+        }
 
         if(!entry.attr["NDIR"] && static_cast<int>(entry.size/4096+1)!=entry.fat_chain.size()) entry.size = entry.fat_chain.size()*4096;
 
@@ -184,25 +185,25 @@ void storeData(std::vector<file> &allFiles, std::vector<unsigned char> &fat, std
                 for(auto &k:entry.fat_chain) {
 
                     std::vector<unsigned char> cluster = readPart(filename,
-                                                                  root_folder_loc + root_size + (8 * PAGE) * (k - 2),
-                                                                  root_folder_loc + root_size + (8 * PAGE) * (k - 1));
-                    if(checkCluster(cluster)){
+                                                                  root_folder_loc + (8 * PAGE) * (k - 2),
+                                                                  root_folder_loc + (8 * PAGE) * (k - 1));
+//                    if(checkCluster(cluster)){
                         for (const auto &c : hexToString(cluster)) outfile << c;
-                    }
+//                    }
                 }
             }
         }
         else{
             for(auto &k:entry.fat_chain){
 
-                std::vector<unsigned char> cluster = readPart(filename, root_folder_loc + root_size+(8*PAGE)*(k-2) , root_folder_loc + root_size+(8*PAGE)*(k-1));
+                std::vector<unsigned char> cluster = readPart(filename, root_folder_loc +(8*PAGE)*(k-2) , root_folder_loc +(8*PAGE)*(k-1));
 
-                if(checkCluster(cluster)){
+//                if(checkCluster(cluster)){
 
                     std::vector<file> entryFiles = getFilesFromRootDirectory(cluster);
 
-                    storeData(std::ref(entryFiles), fat, fat2, root_folder_loc, root_size, filename, current_dir+"/"+entry.name, chains, toWrite, fat_start);
-                }
+                    storeData(std::ref(entryFiles), fat, fat2, root_folder_loc, root_size, filename, current_dir+"/"+entry.longName, chains, toWrite, fat_start);
+//                }
             }
         }
     }
@@ -244,10 +245,6 @@ int main() {
             allFiles.insert(allFiles.end(), tempFiles.begin(), tempFiles.end());
         }
 
-        for(auto &entry:allFiles){
-            getFatChain(std::ref(fat), std::ref(fat2), std::ref(entry.fat_chain));
-        }
-
         auto chains = getAllChains(std::ref(fat), std::ref(fat2));
 
         auto root_folder_loc = fat_start+fat_size*2;
@@ -255,34 +252,43 @@ int main() {
 
         storeData(std::ref(allFiles), std::ref(fat), std::ref(fat2), root_folder_loc, root_size, std::ref(filename),"root", std::ref(chains), false, fat_start);
 
-//        if(!chains.empty()){
-//            for(auto j=1;j<chains.size();j++){
-//                file f;
-//                f.name = "file"+std::to_string(j);
-//                f.ext = "txt";
-//                f.fat_chain.emplace_back(chains[j][0]);
-//                getFatChain(std::ref(fat), std::ref(fat2), std::ref(f.fat));
-//                struct tm date;
-//                date.tm_yday = 28;
-//                date.tm_min = 38;
-//                date.tm_sec = 7;
-//                f.create_date = date;
-//                f.attr["NDIR"] = isDir(std::ref(f.fat_chain), std::ref(filename), root_folder_loc, root_size);
-//                std::vector<unsigned char> entry = parseRootEntryToBytes(f);
-//                std::vector<unsigned char> hexxxx(entry.begin()+26, entry.begin()+28);
-//                std::reverse(hexxxx.begin(), hexxxx.end());
-//                rootDirectory = readPart(filename, root_folder_loc, root_folder_loc + root_size);
-//                int start = findEmptyByteRoot(rootDirectory);
-//                writeToFile(entry, filename, start+root_folder_loc);
-//            }
-//        }
-//        rootDirectory = readPart(filename, root_folder_loc, root_folder_loc + root_size);
-//        fat = readPart(filename, fat_start , fat_start + fat_size);
-//        fat2 = readPart(filename, fat_start+fat_size , fat_start + fat_size*2);
+        if(!chains.empty()){
+            for(auto j=1;j<chains.size();j++){
+                file f;
+                f.name = "file"+std::to_string(j);
+                f.ext = "txt";
+                f.fat_chain.emplace_back(chains[j][0]);
+                getFatChain(std::ref(fat), std::ref(fat2), std::ref(f.fat_chain));
+                struct tm date;
+                date.tm_yday = 28;
+                date.tm_min = 38;
+                date.tm_sec = 7;
+                f.create_date = date;
+                f.attr["NDIR"] = isDir(std::ref(f.fat_chain), std::ref(filename), root_folder_loc, root_size);
+                std::vector<unsigned char> entry = parseRootEntryToBytes(f);
+                int start;
+                int clst_num;
+                for(auto ind=0;ind<rootChain.size();ind++){
+                    auto cl_start = fat_start+fat_size*2 + (config.boot.sectors_per_cluster*PAGE)*(rootChain[ind]-2);
+                    auto cl_end = cl_start+(config.boot.sectors_per_cluster*PAGE)*(rootChain[ind]-1);
+                    std::vector<unsigned char> rootDirectory = readPart(filename, cl_start, cl_end);
+                    start = findEmptyByteRoot(rootDirectory, entry.size());
+                    if(start!=-1){
+                        clst_num = rootChain[ind];
+                        break;
+                    }
 
-//        allFiles = getFilesFromRootDirectory(rootDirectory);
-//
-//        allFiles = collectEntries(std::ref(allFiles), std::ref(fat), std::ref(fat2), std::ref(filename), root_folder_loc, root_size);
+                }
+                writeToFile(entry, filename, root_folder_loc+ (config.boot.sectors_per_cluster*PAGE)*(clst_num-2));
+            }
+        }
+        auto rootDirectory = readPart(filename, root_folder_loc, root_folder_loc + root_size);
+        fat = readPart(filename, fat_start , fat_start + fat_size);
+        fat2 = readPart(filename, fat_start+fat_size , fat_start + fat_size*2);
+
+        allFiles = getFilesFromRootDirectory(rootDirectory);
+
+        allFiles = collectEntries(std::ref(allFiles), std::ref(fat), std::ref(fat2), std::ref(filename), root_folder_loc, root_size);
 //
 //        for(auto &sss:allFiles) getFatChain(std::ref(fat), std::ref(fat2), std::ref(sss.fat_chain));
 //

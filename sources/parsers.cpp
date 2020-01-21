@@ -104,8 +104,44 @@ std::vector<unsigned char> intToUnsignedChar(int val) {
     return bytes;
 }
 
+void addWhiteSpaces(std::string &val, int number) {
+    for (int i=0; i < number; i++) {
+        val += " ";
+    }
+}
+
 std::vector<unsigned char> parseRootEntryToBytes(file entry) {
     std::vector<unsigned char> rootEntry;
+    if (entry.longName.size() > 0) {
+        int number = entry.longName.size() / 26 + 1;
+        int one = 0, two = 10, three = 22;
+        for (int i=0; i < number; i++) {
+            stringToUnsignedChar("A", rootEntry);
+            std::string firstPart = entry.longName.substr(one, 10);
+            std::string secondPart;
+            std::string thirdPart;
+            addWhiteSpaces(firstPart, 10 - (int)firstPart.size());
+            if (entry.longName.size() > 10) {
+                secondPart = entry.longName.substr(two, 12);
+            }
+            if (entry.longName.size() > 22) {
+                thirdPart = entry.longName.substr(three, 4);
+            }
+            addWhiteSpaces(secondPart, 12 - (int)secondPart.size());
+            addWhiteSpaces(thirdPart, 4 - (int)thirdPart.size());
+            stringToUnsignedChar(firstPart, rootEntry);
+            rootEntry.emplace_back(0x0f);
+            rootEntry.emplace_back(0x00);
+            rootEntry.emplace_back(0x00);
+            stringToUnsignedChar(secondPart, rootEntry);
+            rootEntry.emplace_back(0x00);
+            rootEntry.emplace_back(0x00);
+            stringToUnsignedChar(thirdPart, rootEntry);
+            one = three + 4;
+            two = one + 10;
+            three = two + 12;
+        }
+    }
     stringToUnsignedChar(entry.name, rootEntry); // NAME
     stringToUnsignedChar(createString(' ', 8 - entry.name.size()), rootEntry); // NAME TO THE END
     stringToUnsignedChar(entry.ext, rootEntry); // EXTENSION
@@ -139,8 +175,8 @@ std::vector<unsigned char> parseRootEntryToBytes(file entry) {
     return rootEntry;
 }
 
-int findEmptyByteRoot(std::vector<unsigned char> rootDirectory) {
-    for (int iter = 0;;iter+=32) {
+int findEmptyByteRoot(std::vector<unsigned char> rootDirectory, int size) {
+    for (int iter = 0;;iter+=size) {
         if (iter == rootDirectory.size()) {
             break;
         }
@@ -214,38 +250,33 @@ void getFatChain(std::vector<unsigned char> &fat, std::vector<unsigned char> &fa
 
 std::vector<std::vector<int>> getAllChains(std::vector<unsigned char> &fat, std::vector<unsigned char> &fat2){
     std::vector<std::vector<int>> chains;
+    std::vector<int> used_clusters;
     for(auto i=2;i*4+1<fat.size();i++){
-
+        if(std::find(used_clusters.begin(), used_clusters.end(), i) != used_clusters.end()) continue;
         std::vector<int> chain;
         chain.emplace_back(i);
         getFatChain(fat, fat2, std::ref(chain));
 
         if(!chain.empty()){
+            used_clusters.insert(used_clusters.end(), chain.begin(), chain.end());
             chains.emplace_back(chain);
             chain.clear();
         }
     }
-    auto copyChains(chains);
-    for(auto &ch:copyChains) std::sort(ch.begin(), ch.end());
-
     for(auto i=0;i<chains.size();i++){
-        std::cout<<i<<std::endl;
+        auto a = chains[i];
+        std::sort(a.begin(), a.end());
         for(auto j=0;j<chains.size();j++){
-
             if(i!=j){
-                auto a = chains[i];
                 auto b = chains[j];
-                if(std::includes(chains[i].begin(), chains[i].end(), chains[j].begin(), chains[j].end())){
+                std::sort(b.begin(), b.end());
+                if(std::includes(a.begin(), a.end(), b.begin(), b.end())){
                     chains.erase(chains.begin()+j);
                     i--;
+                    j--;
                 }
             }
         }
-    }
-
-    for(auto i=0;i<chains.size();){
-        if(chains[i].empty()) chains.erase(chains.begin()+i);
-        else i++;
     }
 
     return chains;
@@ -291,6 +322,7 @@ std::vector<file> getFilesFromRootDirectory(const std::vector<unsigned char> &ro
         }
         std::vector<unsigned char> filename = std::vector<unsigned char>(rootDirectory.begin() + iter, rootDirectory.begin() + iter + 8);
         if ((!isalpha(filename[0]) && !isdigit(filename[0])) || filename[0] == 0) {
+            iter+=32;
             continue;
         }
 

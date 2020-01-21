@@ -41,7 +41,7 @@ tm parseTime(std::vector<unsigned char> &bytes);
 tm parseDate(std::vector<unsigned char> &bytes);
 void printVector(std::vector<unsigned char> &v);
 void fileToBytes(file fileStruct);
-int findEmptyByteRoot(std::vector<unsigned char> rootDirectory);
+int findEmptyByteRoot(std::vector<unsigned char> rootDirectory, int size);
 bool IsSubset(std::vector<int> A, std::vector<int> B);
 std::vector<unsigned char> reverseBites(std::vector<unsigned char> vect);
 auto hexbytesToInt(const std::vector<unsigned char> &b1) -> unsigned int;
